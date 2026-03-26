@@ -409,7 +409,7 @@ def _parse_sender_lines(lines: list[str]) -> dict[str, str]:
     return {
         "name": name.strip(),
         "bank": bank.strip(),
-        "account": account.lower(),
+        "account": account,
     }
 
 
@@ -429,7 +429,7 @@ def _parse_receiver_lines(lines: list[str]) -> dict[str, str]:
     if len(lines) == 2:
         return {
             "name": lines[0].strip(),
-            "bank": lines[1].strip(),
+            "bank": normalize_account(lines[1].strip()),
             "account": "",
         }
 
@@ -440,8 +440,8 @@ def _parse_receiver_lines(lines: list[str]) -> dict[str, str]:
 
     return {
         "name": name,
-        "bank": bank,
-        "account": account.lower(),
+        "bank": normalize_account(bank),
+        "account": normalize_account(account),
     }
 
 
