@@ -382,9 +382,20 @@ def parse_amount(text: str) -> float:
     return float(m.group().replace(",", "")) if m else 0.0
 
 
+# def normalize_account(acc: str) -> str:
+#     acc = re.sub(r"(?<=[xX\d])\s+(?=[xX\d])", "-", acc)
+#     return acc.lower()
 def normalize_account(acc: str) -> str:
-    acc = re.sub(r"(?<=[xX\d])\s+(?=[xX\d])", "-", acc)
-    return acc.lower()
+
+    acc = acc.strip()
+
+    # normalize dash spacing
+    acc = re.sub(r"\s*-\s*", "-", acc)
+
+    # lowercase เฉพาะ X mask
+    acc = re.sub(r"[X]", "x", acc)
+
+    return acc
 
 
 # ─────────────────────────────────────────
