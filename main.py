@@ -430,7 +430,7 @@ def _parse_receiver_lines(lines: list[str]) -> dict[str, str]:
         return {
             "name": lines[0].strip(),
             "bank": lines[1].strip(),
-            "account": lines[1].strip(),
+            "account": "",
         }
 
     # ≥3 lines → positional parsing
@@ -533,7 +533,13 @@ def parse_slip_to_json(raw_text: str) -> SlipResult:
             tail_idx = i
             break
 
-    receiver_lines = lines[first_account_idx + 1 : tail_idx]
+    receiver_lines = []
+
+    for l in lines[first_account_idx + 1 :]:
+        if any(t in l for t in TAIL_TRIGGERS):
+            break
+
+        receiver_lines.append(l)
 
     receiver = _parse_receiver_lines(receiver_lines)
 
