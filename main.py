@@ -282,9 +282,13 @@ def extract_slip_data(image_bytes: bytes) -> str | None:
     return req.json().get("text", None).replace("↓", "").strip()
 
 
+import re
+from typing import Any
+
 # ─────────────────────────────────────────
 # Patterns & Parsers
 # ─────────────────────────────────────────
+
 TYPE_MAP: dict[str, str] = {
     "โอนเงินสำเร็จ": "normal",
     "ชำระบิลสำเร็จ": "bill",
@@ -297,27 +301,36 @@ TYPE_MAP: dict[str, str] = {
 }
 
 SENDER_ACCOUNT_RE = re.compile(r"^x[\dx\-\s]{4,}[\dx]$", re.IGNORECASE)
+
 PROMPTPAY_PHONE_RE = re.compile(r"^x{2,3}-x{2,3}-\d{1,4}$")
 PROMPTPAY_ID_RE = re.compile(r"^\d{2,3}-x{3,}-\d{1,4}$")
+
 PROMPTPAY_LABEL_RE = re.compile(
     r"^(Prompt\s*Pay|พร้อมเพย์|PromptPay|รหัสพร้อมเพย์|Mobile|QR\s*Code|QR)$",
     re.IGNORECASE,
 )
+
 REF_RE = re.compile(r"^(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{15,}$")
+
 REF_SEARCH_RE = re.compile(
     r"(?<![A-Z0-9])(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{15,}(?![A-Z0-9])"
 )
+
 DATE_RE = re.compile(
     r"\d{1,2}\s+[ก-ๆ็-๎]+\.?\s*[ก-ๆ็-๎]*\.?\s+\d{2,4}\s+\d{1,2}:\d{2}\s*น\.?"
 )
+
 HEADER_NOISE_RE = re.compile(
-    r"(โอนเงิน|ชำระบิล|ชำระเงิน|ชำระ|สำเร็จ|K\+|K|TRUE\s*MONEY|SCB\s*EASY|"
+    r"(โอนเงิน|ชำระบิล|ชำระเงิน|ชำระ|สำเร็จ|K\+|TRUE\s*MONEY|SCB\s*EASY|"
     r"น\.\s*$|มี\.ค\.|ม\.ค\.|ก\.พ\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|"
     r"ต\.ค\.|พ\.ย\.|ธ\.ค\.|^\d{1,2}:\d{2})",
     re.IGNORECASE,
 )
+
 SEPARATOR_RE = re.compile(r"^[↓→←↑\-–—|/\\]+$")
+
 SINGLE_LETTER_ID_RE = re.compile(r"^[A-Z]\d{10,}$")
+
 KBANK_REF_RE = re.compile(r"^0\d+[A-Z]{2,}[A-Z0-9]+$")
 
 TAIL_TRIGGERS: list[str] = [
@@ -338,14 +351,21 @@ class PartyInfo(dict[str, str]):
 SlipResult = dict[str, Any]
 
 
+# ─────────────────────────────────────────
+# Utils
+# ─────────────────────────────────────────
+
+
 def is_sender_account(line: str) -> bool:
     return bool(SENDER_ACCOUNT_RE.match(line.strip()))
 
 
 def is_tail(line: str) -> bool:
     s = line.strip()
+
     if SINGLE_LETTER_ID_RE.match(s):
         return False
+
     return any(t in line for t in TAIL_TRIGGERS) or bool(KBANK_REF_RE.match(s))
 
 
@@ -367,62 +387,73 @@ def normalize_account(acc: str) -> str:
     return acc.lower()
 
 
+# ─────────────────────────────────────────
+# Sender Parser
+# ─────────────────────────────────────────
+
+
 def _parse_sender_lines(lines: list[str]) -> dict[str, str]:
+
     if not lines:
         return {"name": "", "bank": "", "account": ""}
+
     if len(lines) == 1:
         return {"name": "", "bank": "", "account": lines[0]}
+
     account = normalize_account(lines[-1])
+
     bank = lines[-2] if len(lines) >= 2 else ""
+
     name = " ".join(lines[:-2]) if len(lines) >= 3 else ""
-    return {"name": name.strip(), "bank": bank.strip(), "account": account.lower()}
 
-
-def _parse_receiver_lines(lines: list[str]) -> dict[str, str]:
-    if not lines:
-        return {"name": "", "bank": "", "account": ""}
-    if len(lines) == 1:
-        return {"name": "", "bank": "", "account": lines[0]}
-
-    label_indices = [i for i, l in enumerate(lines) if PROMPTPAY_LABEL_RE.match(l)]
-    last_line = lines[-1]
-
-    if label_indices:
-        is_phone = PROMPTPAY_PHONE_RE.match(last_line)
-        is_id = PROMPTPAY_ID_RE.match(last_line)
-        if is_phone or is_id:
-            label_set = set(label_indices)
-            name_lines = [
-                l
-                for i, l in enumerate(lines)
-                if i not in label_set and i != len(lines) - 1
-            ]
-            name = " ".join(name_lines).strip()
-            last_label = lines[label_indices[-1]]
-            if is_phone:
-                return {
-                    "name": name,
-                    "bank": last_label.strip(),
-                    "account": last_line.strip(),
-                }
-            else:
-                return {"name": name, "bank": last_line.strip(), "account": ""}
-
-    if len(lines) == 2:
-        return {"name": lines[0].strip(), "bank": lines[1].strip(), "account": ""}
-
-    account = lines[-1]
-    bank = lines[-2]
-    name = " ".join(lines[:-2])
     return {
         "name": name.strip(),
         "bank": bank.strip(),
-        "account": account.strip().lower(),
+        "account": account,
     }
 
 
+# ─────────────────────────────────────────
+# Receiver Parser (FIXED)
+# ─────────────────────────────────────────
+
+
+def _parse_receiver_lines(lines: list[str]) -> dict[str, str]:
+
+    if not lines:
+        return {"name": "", "bank": "", "account": ""}
+
+    if len(lines) == 1:
+        return {"name": "", "bank": "", "account": lines[0].strip()}
+
+    if len(lines) == 2:
+        return {
+            "name": lines[0].strip(),
+            "bank": lines[1].strip(),
+            "account": lines[1].strip(),
+        }
+
+    # ≥3 lines → positional parsing
+    name = lines[0].strip()
+    bank = lines[1].strip()
+    account = lines[2].strip()
+
+    return {
+        "name": name,
+        "bank": bank,
+        "account": account,
+    }
+
+
+# ─────────────────────────────────────────
+# Empty Result
+# ─────────────────────────────────────────
+
+
 def _empty(slip_type: str, date: str) -> SlipResult:
-    ep: dict[str, str] = {"name": "", "bank": "", "account": ""}
+
+    ep = {"name": "", "bank": "", "account": ""}
+
     return {
         "type": slip_type,
         "date": date,
@@ -434,14 +465,23 @@ def _empty(slip_type: str, date: str) -> SlipResult:
     }
 
 
+# ─────────────────────────────────────────
+# Main Parser
+# ─────────────────────────────────────────
+
+
 def parse_slip_to_json(raw_text: str) -> SlipResult:
+
     lines = [
         l.strip()
         for l in raw_text.splitlines()
         if l.strip() and not SEPARATOR_RE.match(l.strip())
     ]
 
+    # ── type
+
     slip_type = "unknown"
+
     for line in lines:
         for kw, val in TYPE_MAP.items():
             if kw in line:
@@ -450,48 +490,67 @@ def parse_slip_to_json(raw_text: str) -> SlipResult:
         if slip_type != "unknown":
             break
 
+    # ── date
+
     date = ""
+
     for line in lines:
         m = DATE_RE.search(line)
         if m:
             date = m.group().strip()
             break
 
-    first_account_idx: int | None = next(
+    # ── sender
+
+    first_account_idx = next(
         (i for i, l in enumerate(lines) if is_sender_account(l)), None
     )
+
     if first_account_idx is None:
         return _empty(slip_type, date)
 
     sender_start = first_account_idx
+
     for i in range(first_account_idx - 1, -1, -1):
         if is_noise(lines[i]):
             sender_start = i + 1
             break
+
         if i == 0:
             sender_start = 0
 
     sender = _parse_sender_lines(lines[sender_start : first_account_idx + 1])
 
-    tail_idx: int = next(
+    # ── receiver
+
+    tail_idx = next(
         (i for i, l in enumerate(lines) if i > first_account_idx and is_tail(l)),
         len(lines),
     )
+
     receiver_lines = lines[first_account_idx + 1 : tail_idx]
+
     receiver = _parse_receiver_lines(receiver_lines)
 
+    # ── tail
+
     tail = lines[tail_idx:]
+
     ref = ""
     amount = 0.0
     fee = 0.0
+
     i = 0
+
     while i < len(tail):
         line = tail[i]
 
         if not ref and ("เลขที่รายการ" in line or "เลขอ้างอิง" in line):
             m = REF_SEARCH_RE.search(line)
+
             if m:
                 ref = m.group()
+
             else:
                 nxt = tail[i + 1].strip() if i + 1 < len(tail) else ""
                 ref = nxt if REF_RE.match(nxt) else ""
@@ -501,6 +560,7 @@ def parse_slip_to_json(raw_text: str) -> SlipResult:
 
         if "จำนวน" in line:
             m2 = re.search(r"([\d,]+(?:\.\d+)?)\s*บาท", line)
+
             amount = (
                 parse_amount(m2.group(1))
                 if m2
@@ -509,6 +569,7 @@ def parse_slip_to_json(raw_text: str) -> SlipResult:
 
         if "ค่าธรรมเนียม" in line or "ค่าบริการ" in line:
             m3 = re.search(r"([\d,]+(?:\.\d+)?)\s*บาท", line)
+
             fee = (
                 parse_amount(m3.group(1))
                 if m3
