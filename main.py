@@ -274,7 +274,7 @@ def decode_slip_qr(img: BGRImage) -> dict[str, str] | None:
 # ─────────────────────────────────────────
 def extract_slip_data(image_bytes: bytes) -> str | None:
     req = requests.post(
-        "http://localhost:3000/ocr",
+        "http://localhost:5007/ocr",
         files={"image": ("slip.jpg", image_bytes, "image/jpeg")},
     )
     if req.status_code != 200:
@@ -577,6 +577,7 @@ async def ocr_receipt(image: UploadFile = File(...)) -> Response:
         result["ref"] = qr_info["transRef"]
 
     result["receiver"]["logo"] = logo_b64
+    result["ocr"] = raw_text
 
     body = json.dumps(result, ensure_ascii=False).encode("utf-8")
     compressed = _gzip.compress(body, compresslevel=6)
