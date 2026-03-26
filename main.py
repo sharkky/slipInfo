@@ -523,10 +523,15 @@ def parse_slip_to_json(raw_text: str) -> SlipResult:
 
     # ── receiver
 
-    tail_idx = next(
-        (i for i, l in enumerate(lines) if i > first_account_idx and is_tail(l)),
-        len(lines),
-    )
+    tail_idx = len(lines)
+
+    for i in range(first_account_idx + 1, len(lines)):
+        if i <= first_account_idx + 3:
+            continue
+
+        if is_tail(lines[i]):
+            tail_idx = i
+            break
 
     receiver_lines = lines[first_account_idx + 1 : tail_idx]
 
