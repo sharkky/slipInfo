@@ -274,7 +274,7 @@ def decode_slip_qr(img: BGRImage) -> dict[str, str] | None:
 # ─────────────────────────────────────────
 def extract_slip_data(image_bytes: bytes) -> str | None:
     req = requests.post(
-        "http://154.197.124.131:5007/ocr",
+        "http://localhost:5007/ocr",
         files={"image": ("slip.jpg", image_bytes, "image/jpeg")},
     )
     if req.status_code != 200:
