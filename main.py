@@ -641,7 +641,7 @@ async def ocr_receipt(image: UploadFile = File(...)) -> Response:
         raise HTTPException(status_code=400, detail="ไม่สามารถอ่านไฟล์รูปได้")
 
     # compress image
-    img = compress_jpeg_bgr(img, quality=90)
+    img = compress_jpeg_bgr(img, quality=70)
 
     qr_info = decode_slip_qr(img.copy())
 
