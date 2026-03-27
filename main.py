@@ -274,7 +274,7 @@ def decode_slip_qr(img: BGRImage) -> dict[str, str] | None:
 # ─────────────────────────────────────────
 def extract_slip_data(image_bytes: bytes) -> str | None:
     req = requests.post(
-        "http://localhost:5007/ocr",
+        "http://154.197.124.131:5007/ocr",
         files={"image": ("slip.jpg", image_bytes, "image/jpeg")},
     )
     if req.status_code != 200:
@@ -611,6 +611,20 @@ def parse_slip_to_json(raw_text: str) -> SlipResult:
     }
 
 
+def compress_jpeg_bgr(img: BGRImage, quality: int = 80) -> BGRImage:
+    success, encoded = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+
+    if not success:
+        raise ValueError("JPEG compression failed")
+
+    compressed = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
+
+    if compressed is None:
+        raise ValueError("JPEG decode failed")
+
+    return compressed
+
+
 @app.post("/ocr-receipt")
 async def ocr_receipt(image: UploadFile = File(...)) -> Response:
     if image.content_type not in SUPPORTED_CONTENT_TYPES:
@@ -625,6 +639,9 @@ async def ocr_receipt(image: UploadFile = File(...)) -> Response:
     img: BGRImage = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
     if img is None:
         raise HTTPException(status_code=400, detail="ไม่สามารถอ่านไฟล์รูปได้")
+
+    # compress image
+    img = compress_jpeg_bgr(img, quality=96)
 
     qr_info = decode_slip_qr(img.copy())
 
